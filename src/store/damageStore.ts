@@ -13,6 +13,7 @@ interface DamageState {
   getRecordsByEquipment: (equipmentId: string) => DamageRecord[];
   getRecordsByStatus: (status: DamageStatus) => DamageRecord[];
   getPendingCount: () => number;
+  replaceAll: (records: DamageRecord[]) => void;
 }
 
 export const useDamageStore = create<DamageState>()(
@@ -73,6 +74,10 @@ export const useDamageStore = create<DamageState>()(
       getPendingCount: () => {
         const { records } = get();
         return records.filter((r) => r.status === 'pending').length;
+      },
+
+      replaceAll: (records) => {
+        set({ records });
       },
     }),
     {

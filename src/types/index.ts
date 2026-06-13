@@ -40,6 +40,24 @@ export interface BorrowRecord {
   status: BorrowStatus;
   quantityDiff: number;
   remark: string;
+  diffDetails?: ReturnDiffDetail[];
+}
+
+export interface ReturnDiffDetail {
+  type: 'short' | 'extra' | 'damage';
+  quantity: number;
+  description: string;
+  handler: string;
+  recordDate: string;
+}
+
+export interface BackupData {
+  version: string;
+  exportDate: string;
+  equipment: Equipment[];
+  borrowRecords: BorrowRecord[];
+  damageRecords: DamageRecord[];
+  settings: AppSettings;
 }
 
 export interface DamageRecord {

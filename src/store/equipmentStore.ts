@@ -13,6 +13,7 @@ interface EquipmentState {
   getEquipmentByCode: (code: string) => Equipment | undefined;
   getEquipmentByCategory: (category: EquipmentCategory) => Equipment[];
   updateBorrowCount: (id: string) => void;
+  replaceAll: (equipment: Equipment[]) => void;
 }
 
 export const useEquipmentStore = create<EquipmentState>()(
@@ -69,6 +70,10 @@ export const useEquipmentStore = create<EquipmentState>()(
             e.id === id ? { ...e, borrowCount: e.borrowCount + 1 } : e
           ),
         });
+      },
+
+      replaceAll: (equipment) => {
+        set({ equipment });
       },
     }),
     {

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Users,
   User,
@@ -9,10 +9,14 @@ import {
   Check,
   Calendar,
   ArrowRight,
+  Printer,
+  ClipboardList,
+  History,
 } from 'lucide-react';
 import { PageHeader } from '../../components/Layout/PageHeader';
 import { SearchInput } from '../../components/Form/SearchInput';
 import { StatCard } from '../../components/Card/StatCard';
+import { Modal } from '../../components/Modal/Modal';
 import { useBorrowStore } from '../../store/borrowStore';
 import { useEquipmentStore } from '../../store/equipmentStore';
 import { useSettingsStore } from '../../store/settingsStore';
@@ -28,10 +32,10 @@ interface BorrowItem {
 }
 
 export const BorrowPage = () => {
-  const { addRecord, getOverdueRecords, refreshOverdueStatus } = useBorrowStore();
-  const { equipment, updateEquipment, updateBorrowCount } = useEquipmentStore();
-  const { maxBorrowDays } = useSettingsStore();
-  const { showSuccess, showError } = useToast();
+  const { addRecord, getOverdueRecords, refreshOverdueStatus, getLastBorrowByClass } = useBorrowStore();
+  const { equipment, updateEquipment, updateBorrowCount, getEquipmentById } = useEquipmentStore();
+  const { maxBorrowDays, schoolName } = useSettingsStore();
+  const { showSuccess, showError, showInfo } = useToast();
 
   const [borrowerType, setBorrowerType] = useState<'class' | 'individual'>('class');
   const [selectedGrade, setSelectedGrade] = useState('高一');
@@ -43,6 +47,16 @@ export const BorrowPage = () => {
 
   const [borrowItems, setBorrowItems] = useState<BorrowItem[]>([]);
   const [overdueRecords, setOverdueRecords] = useState<ReturnType<typeof getOverdueRecords>>([]);
+  const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+  const [printData, setPrintData] = useState<{
+    borrowId: string;
+    className: string;
+    borrowerName: string;
+    borrowDate: string;
+    dueDate: string;
+    items: BorrowItem[];
+    remark: string;
+  } | null>(null);
 
   const grades = ['高一', '高二', '高三'];
   const classes = mockClasses.filter((c) => c.grade === selectedGrade);
@@ -100,6 +114,40 @@ export const BorrowPage = () => {
     setBorrowItems([]);
   };
 
+  const handleLoadLastBorrow = () => {
+    if (!selectedClass) {
+      showError('请先选择班级');
+      return;
+    }
+    const lastBorrow = getLastBorrowByClass(selectedClass);
+    if (lastBorrow.length === 0) {
+      showInfo('该班级还没有借用记录');
+      return;
+    }
+
+    const newItems: BorrowItem[] = [];
+    lastBorrow.forEach((item) => {
+      const eq = getEquipmentById(item.equipmentId);
+      if (eq && eq.availableQuantity > 0) {
+        const qty = Math.min(item.quantity, eq.availableQuantity);
+        newItems.push({ equipment: eq, quantity: qty });
+      }
+    });
+
+    if (newItems.length > 0) {
+      setBorrowItems(newItems);
+      showSuccess(`已载入上次借用清单（${newItems.length}种器材）`);
+    } else {
+      showInfo('上次借用的器材当前都不可用');
+    }
+  };
+
+  const handlePrintSlip = () => {
+    if (printData) {
+      window.print();
+    }
+  };
+
   const handleBorrow = () => {
     if (borrowItems.length === 0) {
       showError('请选择要借出的器材');
@@ -131,6 +179,7 @@ export const BorrowPage = () => {
     const dueDate = addDays(borrowDate, actualBorrowDays);
     const className = borrowerType === 'class' ? selectedClass : '';
     const borrower = borrowerType === 'class' ? borrowerName || '体育老师' : borrowerName;
+    const borrowId = 'BR' + Date.now().toString().slice(-8);
 
     borrowItems.forEach((item) => {
       addRecord({
@@ -157,9 +206,20 @@ export const BorrowPage = () => {
       updateBorrowCount(item.equipment.id);
     });
 
+    setPrintData({
+      borrowId,
+      className,
+      borrowerName: borrower,
+      borrowDate,
+      dueDate,
+      items: borrowItems.map((item) => ({ ...item })),
+      remark,
+    });
+
     showSuccess('借出登记成功');
     setBorrowItems([]);
     setRemark('');
+    setIsPrintModalOpen(true);
   };
 
   return (
@@ -330,6 +390,16 @@ export const BorrowPage = () => {
                     ))}
                   </select>
                 </div>
+                {selectedClass && (
+                  <button
+                    type="button"
+                    onClick={handleLoadLastBorrow}
+                    className="w-full mb-4 py-2 px-3 bg-primary-50 text-primary-600 rounded-lg text-sm font-medium hover:bg-primary-100 transition-colors flex items-center justify-center gap-2"
+                  >
+                    <History className="w-4 h-4" />
+                    载入该班上一次借用清单
+                  </button>
+                )}
               </>
             ) : (
               <div className="mb-3">
@@ -422,15 +492,20 @@ export const BorrowPage = () => {
 
           <div className="card p-5">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="font-semibold text-slate-800">借出清单</h3>
-              {borrowItems.length > 0 && (
-                <button
-                  className="text-xs text-slate-400 hover:text-red-500"
-                  onClick={handleClearAll}
-                >
-                  清空
-                </button>
-              )}
+              <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                <ClipboardList className="w-4 h-4" />
+                借出清单
+              </h3>
+              <div className="flex items-center gap-2">
+                {borrowItems.length > 0 && (
+                  <button
+                    onClick={handleClearAll}
+                    className="text-xs text-slate-400 hover:text-red-500"
+                  >
+                    清空
+                  </button>
+                )}
+              </div>
             </div>
 
             <div className="space-y-2 max-h-[200px] overflow-y-auto mb-4">
@@ -509,6 +584,139 @@ export const BorrowPage = () => {
           </div>
         </div>
       </div>
+
+      <Modal
+        isOpen={isPrintModalOpen}
+        onClose={() => setIsPrintModalOpen(false)}
+        title="打印借用单"
+        size="lg"
+        footer={
+          <div className="flex justify-end gap-3 no-print">
+            <button
+              className="btn-secondary"
+              onClick={() => setIsPrintModalOpen(false)}
+            >
+              关闭
+            </button>
+            <button className="btn-primary" onClick={handlePrintSlip}>
+              <Printer className="w-4 h-4" />
+              打印借用单
+            </button>
+          </div>
+        }
+      >
+        <style>{`
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            .print-area, .print-area * {
+              visibility: visible;
+            }
+            .print-area {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+              padding: 20px;
+            }
+            .no-print {
+              display: none !important;
+            }
+          }
+        `}</style>
+        {printData && (
+          <div className="print-area">
+            <div className="text-center mb-6">
+              <h1 className="text-2xl font-bold text-slate-800 mb-2">
+                {schoolName || '学校'}
+              </h1>
+              <h2 className="text-xl font-semibold text-slate-700">体育器材借用单</h2>
+              <p className="text-sm text-slate-500 mt-2">
+                单据编号：{printData.borrowId}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4 mb-6 text-sm">
+              <div>
+                <span className="text-slate-500">借用班级/个人：</span>
+                <span className="font-medium text-slate-800">
+                  {printData.className || printData.borrowerName}
+                </span>
+              </div>
+              <div>
+                <span className="text-slate-500">负责老师：</span>
+                <span className="font-medium text-slate-800">{printData.borrowerName}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">借用日期：</span>
+                <span className="font-medium text-slate-800">{printData.borrowDate}</span>
+              </div>
+              <div>
+                <span className="text-slate-500">应还日期：</span>
+                <span className="font-medium text-slate-800">{printData.dueDate}</span>
+              </div>
+            </div>
+
+            <table className="w-full border-collapse mb-6">
+              <thead>
+                <tr className="bg-slate-100">
+                  <th className="border border-slate-300 px-4 py-2 text-left text-sm">序号</th>
+                  <th className="border border-slate-300 px-4 py-2 text-left text-sm">器材名称</th>
+                  <th className="border border-slate-300 px-4 py-2 text-left text-sm">器材编号</th>
+                  <th className="border border-slate-300 px-4 py-2 text-center text-sm">数量</th>
+                </tr>
+              </thead>
+              <tbody>
+                {printData.items.map((item, index) => (
+                  <tr key={item.equipment.id}>
+                    <td className="border border-slate-300 px-4 py-2 text-sm">{index + 1}</td>
+                    <td className="border border-slate-300 px-4 py-2 text-sm">
+                      {item.equipment.imageUrl} {item.equipment.name}
+                    </td>
+                    <td className="border border-slate-300 px-4 py-2 text-sm font-mono">
+                      {item.equipment.code}
+                    </td>
+                    <td className="border border-slate-300 px-4 py-2 text-center text-sm font-medium">
+                      {item.quantity}
+                    </td>
+                  </tr>
+                ))}
+                <tr className="bg-slate-50 font-semibold">
+                  <td className="border border-slate-300 px-4 py-2 text-right" colSpan={3}>
+                    合计
+                  </td>
+                  <td className="border border-slate-300 px-4 py-2 text-center">
+                    {printData.items.reduce((sum, item) => sum + item.quantity, 0)} 件
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+
+            {printData.remark && (
+              <div className="mb-6 text-sm">
+                <span className="text-slate-500">备注：</span>
+                <span className="text-slate-800">{printData.remark}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-3 gap-8 mt-12 text-sm text-slate-600">
+              <div className="text-center">
+                <div className="border-b border-slate-400 pb-8 mb-2">借用人签字</div>
+                <p>日期：_____________</p>
+              </div>
+              <div className="text-center">
+                <div className="border-b border-slate-400 pb-8 mb-2">器材管理员签字</div>
+                <p>日期：_____________</p>
+              </div>
+              <div className="text-center">
+                <div className="border-b border-slate-400 pb-8 mb-2">归还确认</div>
+                <p>日期：_____________</p>
+              </div>
+            </div>
+          </div>
+        )}
+      </Modal>
     </div>
   );
 };

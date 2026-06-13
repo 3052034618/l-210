@@ -8,6 +8,11 @@ import {
   Clock,
   Package,
   ArrowLeft,
+  MinusCircle,
+  PlusCircle,
+  AlertOctagon,
+  FileText,
+  Eye,
 } from 'lucide-react';
 import { PageHeader } from '../../components/Layout/PageHeader';
 import { Modal } from '../../components/Modal/Modal';
@@ -16,9 +21,21 @@ import { useBorrowStore } from '../../store/borrowStore';
 import { useEquipmentStore } from '../../store/equipmentStore';
 import { useDamageStore } from '../../store/damageStore';
 import { useToast } from '../../store/toastStore';
-import type { BorrowRecord } from '../../types';
+import type { BorrowRecord, ReturnDiffDetail } from '../../types';
 import { BORROW_STATUS_LABELS } from '../../types';
-import { formatDate, getOverdueDays, isOverdue } from '../../utils/dateUtils';
+import { formatDate, getOverdueDays, isOverdue, getToday } from '../../utils/dateUtils';
+
+const DIFF_TYPE_LABELS: Record<ReturnDiffDetail['type'], string> = {
+  short: '少还',
+  extra: '多还',
+  damage: '损坏',
+};
+
+const DIFF_TYPE_COLORS: Record<ReturnDiffDetail['type'], string> = {
+  short: 'text-red-600 bg-red-50',
+  extra: 'text-blue-600 bg-blue-50',
+  damage: 'text-orange-600 bg-orange-50',
+};
 
 export const ReturnPage = () => {
   const { records, returnEquipment, getActiveRecords, refreshOverdueStatus } = useBorrowStore();
@@ -35,7 +52,11 @@ export const ReturnPage = () => {
   const [damageDescription, setDamageDescription] = useState('');
   const [damageType, setDamageType] = useState<'minor' | 'serious' | 'scrapped'>('minor');
   const [damagePhotos, setDamagePhotos] = useState<string[]>([]);
+  const [diffRemark, setDiffRemark] = useState('');
+  const [diffHandler, setDiffHandler] = useState('');
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
+  const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [selectedDetailRecord, setSelectedDetailRecord] = useState<BorrowRecord | null>(null);
   const [recentReturns, setRecentReturns] = useState<BorrowRecord[]>([]);
 
   const activeRecords = useMemo(() => {
@@ -66,6 +87,8 @@ export const ReturnPage = () => {
       setHasDamage(false);
       setDamageDescription('');
       setDamagePhotos([]);
+      setDiffRemark('');
+      setDiffHandler('');
       setIsReturnModalOpen(true);
     } else {
       showError('未找到该器材的借出记录');
@@ -80,6 +103,8 @@ export const ReturnPage = () => {
     setHasDamage(false);
     setDamageDescription('');
     setDamagePhotos([]);
+    setDiffRemark('');
+    setDiffHandler('');
     setIsReturnModalOpen(true);
   };
 
@@ -97,7 +122,54 @@ export const ReturnPage = () => {
       return;
     }
 
-    returnEquipment(selectedRecord.id, returnQuantity, quantityDiff);
+    const diffDetails: ReturnDiffDetail[] = [];
+    const today = getToday();
+    const handler = diffHandler || '器材管理员';
+
+    if (quantityDiff < 0) {
+      diffDetails.push({
+        type: 'short',
+        quantity: Math.abs(quantityDiff),
+        description: diffRemark || '少还未说明原因',
+        handler,
+        recordDate: today,
+      });
+    }
+
+    if (quantityDiff > 0) {
+      diffDetails.push({
+        type: 'extra',
+        quantity: quantityDiff,
+        description: diffRemark || '多还未说明原因',
+        handler,
+        recordDate: today,
+      });
+    }
+
+    if (hasDamage && damageDescription.trim()) {
+      diffDetails.push({
+        type: 'damage',
+        quantity: 1,
+        description: `${DIFF_TYPE_LABELS.damage}：${damageDescription}`,
+        handler,
+        recordDate: today,
+      });
+
+      addDamageRecord({
+        equipmentId: selectedRecord.equipmentId,
+        equipmentName: selectedRecord.equipmentName,
+        borrowRecordId: selectedRecord.id,
+        damageDate: today,
+        damageType,
+        description: damageDescription,
+        photoUrl: '',
+        photoUrls: damagePhotos,
+        handler,
+        handleResult: '',
+      });
+    }
+
+    returnEquipment(selectedRecord.id, returnQuantity, quantityDiff, diffRemark, diffDetails);
 
     const equipment = useEquipmentStore.getState().getEquipmentById(selectedRecord.equipmentId);
     if (equipment) {
@@ -108,21 +180,6 @@ export const ReturnPage = () => {
       updateEquipment(equipment.id, {
         availableQuantity: newAvailable,
         status: newAvailable > 0 ? 'available' : equipment.status,
-      });
-    }
-
-    if (hasDamage && damageDescription.trim()) {
-      addDamageRecord({
-        equipmentId: selectedRecord.equipmentId,
-        equipmentName: selectedRecord.equipmentName,
-        borrowRecordId: selectedRecord.id,
-        damageDate: formatDate(new Date()),
-        damageType,
-        description: damageDescription,
-        photoUrl: '',
-        photoUrls: damagePhotos,
-        handler: '',
-        handleResult: '',
       });
     }
 
@@ -243,6 +300,29 @@ export const ReturnPage = () => {
                           借 {record.quantity} 件 / 还 {record.returnedQuantity} 件
                         </span>
                       </div>
+                      {record.diffDetails && record.diffDetails.length > 0 && (
+                        <div className="flex items-center gap-2 mt-2">
+                          {record.diffDetails.map((diff, i) => (
+                            <span
+                              key={i}
+                              className={`text-xs px-2 py-0.5 rounded-full font-medium ${DIFF_TYPE_COLORS[diff.type]}`}
+                            >
+                              {DIFF_TYPE_LABELS[diff.type]} {diff.quantity}件
+                            </span>
+                          ))}
+                          <button
+                            className="text-xs text-primary-600 hover:text-primary-700 flex items-center gap-1 ml-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedDetailRecord(record);
+                              setIsDetailModalOpen(true);
+                            }}
+                          >
+                            <Eye className="w-3 h-3" />
+                            查看详情
+                          </button>
+                        </div>
+                      )}
                       <div className="flex items-center gap-3 mt-1 text-xs text-slate-400">
                         <Clock className="w-3 h-3" />
                         <span>借出：{formatDate(record.borrowDate)}</span>
@@ -457,15 +537,41 @@ export const ReturnPage = () => {
             </div>
 
             {quantityDiff !== 0 && (
-              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-3 flex items-start gap-2">
-                <AlertTriangle className="w-5 h-5 text-yellow-600 flex-shrink-0 mt-0.5" />
-                <div>
-                  <p className="text-sm font-medium text-yellow-800">
-                    数量差异：{quantityDiff > 0 ? '多还' : '少还'} {Math.abs(quantityDiff)} 件
-                  </p>
-                  <p className="text-xs text-yellow-600 mt-0.5">
-                    请在备注中说明原因
-                  </p>
+              <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+                <div className="flex items-start gap-2 mb-3">
+                  {quantityDiff < 0 ? (
+                    <MinusCircle className="w-5 h-5 text-red-600 flex-shrink-0 mt-0.5" />
+                  ) : (
+                    <PlusCircle className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <p className="text-sm font-medium text-slate-800">
+                      数量差异：
+                      <span className={quantityDiff < 0 ? 'text-red-600' : 'text-blue-600'}>
+                        {quantityDiff > 0 ? '多还' : '少还'} {Math.abs(quantityDiff)} 件
+                      </span>
+                    </p>
+                  </div>
+                </div>
+                <div className="space-y-3 pl-7">
+                  <div>
+                    <label className="label text-xs">差异原因说明</label>
+                    <textarea
+                      className="input min-h-[60px] text-sm"
+                      value={diffRemark}
+                      onChange={(e) => setDiffRemark(e.target.value)}
+                      placeholder={`请说明${quantityDiff > 0 ? '多还' : '少还'}原因...`}
+                    />
+                  </div>
+                  <div>
+                    <label className="label text-xs">处理人</label>
+                    <input
+                      className="input text-sm"
+                      value={diffHandler}
+                      onChange={(e) => setDiffHandler(e.target.value)}
+                      placeholder="请输入处理人姓名"
+                    />
+                  </div>
                 </div>
               </div>
             )}
@@ -529,6 +635,96 @@ export const ReturnPage = () => {
                       maxImages={5}
                     />
                   </div>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal
+        isOpen={isDetailModalOpen}
+        onClose={() => setIsDetailModalOpen(false)}
+        title="归还差异详情"
+        size="lg"
+        footer={
+          <div className="flex justify-end">
+            <button
+              className="btn-secondary"
+              onClick={() => setIsDetailModalOpen(false)}
+            >
+              关闭
+            </button>
+          </div>
+        }
+      >
+        {selectedDetailRecord && (
+          <div className="space-y-5">
+            <div className="bg-slate-50 rounded-xl p-4">
+              <div className="flex items-center gap-4">
+                <div className="w-14 h-14 bg-white rounded-xl flex items-center justify-center text-3xl shadow-sm">
+                  📦
+                </div>
+                <div className="flex-1">
+                  <h4 className="font-semibold text-lg text-slate-800">
+                    {selectedDetailRecord.equipmentName}
+                  </h4>
+                  <p className="text-sm text-slate-500">
+                    {selectedDetailRecord.equipmentCode}
+                  </p>
+                  <p className="text-sm text-slate-500 mt-1">
+                    {selectedDetailRecord.borrowerType === 'class'
+                      ? selectedDetailRecord.className
+                      : selectedDetailRecord.borrowerName}
+                    {' · '}借出 {selectedDetailRecord.quantity} 件 / 已还{' '}
+                    {selectedDetailRecord.returnedQuantity} 件
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div>
+              <h4 className="font-semibold text-slate-800 mb-3 flex items-center gap-2">
+                <FileText className="w-4 h-4" />
+                差异处理记录
+              </h4>
+              {selectedDetailRecord.diffDetails &&
+              selectedDetailRecord.diffDetails.length > 0 ? (
+                <div className="space-y-3">
+                  {selectedDetailRecord.diffDetails.map((diff, index) => (
+                    <div
+                      key={index}
+                      className="border border-slate-200 rounded-lg p-4"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span
+                          className={`text-sm font-medium px-3 py-1 rounded-full ${DIFF_TYPE_COLORS[diff.type]}`}
+                        >
+                          {diff.type === 'short' && (
+                            <MinusCircle className="w-3 h-3 inline mr-1" />
+                          )}
+                          {diff.type === 'extra' && (
+                            <PlusCircle className="w-3 h-3 inline mr-1" />
+                          )}
+                          {diff.type === 'damage' && (
+                            <AlertOctagon className="w-3 h-3 inline mr-1" />
+                          )}
+                          {DIFF_TYPE_LABELS[diff.type]} {diff.quantity} 件
+                        </span>
+                        <span className="text-xs text-slate-400">
+                          {formatDate(diff.recordDate)}
+                        </span>
+                      </div>
+                      <p className="text-sm text-slate-700 mb-2">
+                        {diff.description}
+                      </p>
+                      <p className="text-xs text-slate-500">处理人：{diff.handler}</p>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="py-8 text-center text-slate-400">
+                  暂无差异记录
                 </div>
               )}
             </div>

@@ -9,12 +9,16 @@ import {
   ShoppingCart,
   Calendar,
   Search,
+  AlertTriangle,
+  AlertOctagon,
+  Table,
 } from 'lucide-react';
 import { PageHeader } from '../../components/Layout/PageHeader';
 import { StatCard } from '../../components/Card/StatCard';
 import { Modal } from '../../components/Modal/Modal';
 import { useEquipmentStore } from '../../store/equipmentStore';
 import { useBorrowStore } from '../../store/borrowStore';
+import { useDamageStore } from '../../store/damageStore';
 import { useToast } from '../../store/toastStore';
 import { mockClasses } from '../../data/mockData';
 import { CATEGORY_LABELS } from '../../types';
@@ -28,16 +32,28 @@ interface ClassStats {
   totalQuantity: number;
 }
 
+interface ClassPeriodStats {
+  className: string;
+  borrowCount: number;
+  overdueCount: number;
+  damageCount: number;
+  totalQuantity: number;
+}
+
+type TimeRange = 'week' | 'month' | 'all';
+
 export const StatisticsPage = () => {
   const { equipment } = useEquipmentStore();
   const { getAllRecords } = useBorrowStore();
+  const { records: damageRecords } = useDamageStore();
   const { showSuccess } = useToast();
 
-  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'popular' | 'purchase'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'history' | 'popular' | 'purchase' | 'summary'>('overview');
   const [searchText, setSearchText] = useState('');
   const [selectedClass, setSelectedClass] = useState('');
   const [isInventoryModalOpen, setIsInventoryModalOpen] = useState(false);
   const [isPurchaseModalOpen, setIsPurchaseModalOpen] = useState(false);
+  const [timeRange, setTimeRange] = useState<TimeRange>('month');
 
   const records = getAllRecords();
 
@@ -129,10 +145,97 @@ export const StatisticsPage = () => {
     setIsPurchaseModalOpen(false);
   };
 
+  const getStartDate = (range: TimeRange): string => {
+    const now = new Date();
+    if (range === 'week') {
+      const d = new Date(now);
+      d.setDate(d.getDate() - 7);
+      return d.toISOString().slice(0, 10);
+    }
+    if (range === 'month') {
+      const d = new Date(now);
+      d.setMonth(d.getMonth() - 1);
+      return d.toISOString().slice(0, 10);
+    }
+    return '1970-01-01';
+  };
+
+  const periodStats = useMemo<ClassPeriodStats[]>(() => {
+    const startDate = getStartDate(timeRange);
+    const classMap = new Map<string, ClassPeriodStats>();
+
+    const periodRecords = records.filter(
+      (r) => r.borrowerType === 'class' && r.borrowDate >= startDate
+    );
+
+    periodRecords.forEach((r) => {
+      const existing = classMap.get(r.className);
+      if (existing) {
+        existing.borrowCount += 1;
+        existing.totalQuantity += r.quantity;
+        if (r.status === 'overdue') {
+          existing.overdueCount += 1;
+        }
+      } else {
+        classMap.set(r.className, {
+          className: r.className,
+          borrowCount: 1,
+          overdueCount: r.status === 'overdue' ? 1 : 0,
+          damageCount: 0,
+          totalQuantity: r.quantity,
+        });
+      }
+    });
+
+    const periodDamages = damageRecords.filter((d) => d.damageDate >= startDate);
+    const damageRecordsMap = new Map<string, number>();
+    periodDamages.forEach((d) => {
+      const relatedRecord = records.find((r) => r.id === d.borrowRecordId);
+      if (relatedRecord && relatedRecord.borrowerType === 'class' && relatedRecord.className) {
+        damageRecordsMap.set(
+          relatedRecord.className,
+          (damageRecordsMap.get(relatedRecord.className) || 0) + 1
+        );
+      }
+    });
+
+    classMap.forEach((stats, className) => {
+      stats.damageCount = damageRecordsMap.get(className) || 0;
+    });
+
+    return Array.from(classMap.values()).sort((a, b) => b.borrowCount - a.borrowCount);
+  }, [records, damageRecords, timeRange]);
+
+  const handleExportPeriodSummary = () => {
+    const headers = ['班级', '借用次数', '借用器材总数', '逾期次数', '损坏次数'];
+    const rows = periodStats.map((s) => [
+      s.className,
+      s.borrowCount.toString(),
+      s.totalQuantity.toString(),
+      s.overdueCount.toString(),
+      s.damageCount.toString(),
+    ]);
+
+    const csvContent =
+      '\uFEFF' + [headers, ...rows].map((row) => row.join(',')).join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    const rangeLabel = timeRange === 'week' ? '本周' : timeRange === 'month' ? '本月' : '全部';
+    link.download = `${formatDate(new Date())}_${rangeLabel}班级统计汇总.csv`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+    showSuccess('统计汇总导出成功');
+  };
+
   const maxBorrowCount = popularEquipment.length > 0 ? popularEquipment[0].borrowCount : 1;
 
   const tabs = [
     { key: 'overview', label: '数据概览', icon: BarChart3 },
+    { key: 'summary', label: '时间汇总', icon: Table },
     { key: 'history', label: '借用历史', icon: FileText },
     { key: 'popular', label: '热门器材', icon: TrendingUp },
     { key: 'purchase', label: '补采购清单', icon: ShoppingCart },
@@ -315,6 +418,121 @@ export const StatisticsPage = () => {
                   )}
                 </div>
               </div>
+            </div>
+          )}
+
+          {activeTab === 'summary' && (
+            <div className="space-y-6">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-slate-800 flex items-center gap-2">
+                  <Calendar className="w-5 h-5 text-primary-500" />
+                  班级统计汇总
+                </h3>
+                <div className="flex items-center gap-3">
+                  <div className="flex bg-slate-100 rounded-lg p-1">
+                    {[
+                      { value: 'week', label: '本周' },
+                      { value: 'month', label: '本月' },
+                      { value: 'all', label: '全部' },
+                    ].map((opt) => (
+                      <button
+                        key={opt.value}
+                        onClick={() => setTimeRange(opt.value as TimeRange)}
+                        className={`px-4 py-1.5 rounded-md text-sm font-medium transition-colors ${
+                          timeRange === opt.value
+                            ? 'bg-white text-primary-600 shadow-sm'
+                            : 'text-slate-500 hover:text-slate-700'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+                  <button className="btn-primary" onClick={handleExportPeriodSummary}>
+                    <Download className="w-4 h-4" />
+                    导出汇总
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-4 mb-4">
+                <StatCard
+                  title="班级总数"
+                  value={periodStats.length}
+                  icon={<Users className="w-5 h-5" />}
+                  color="blue"
+                />
+                <StatCard
+                  title="借用总次数"
+                  value={periodStats.reduce((sum, s) => sum + s.borrowCount, 0)}
+                  icon={<TrendingUp className="w-5 h-5" />}
+                  color="green"
+                />
+                <StatCard
+                  title="逾期总次数"
+                  value={periodStats.reduce((sum, s) => sum + s.overdueCount, 0)}
+                  icon={<AlertTriangle className="w-5 h-5" />}
+                  color="orange"
+                />
+                <StatCard
+                  title="损坏总次数"
+                  value={periodStats.reduce((sum, s) => sum + s.damageCount, 0)}
+                  icon={<AlertOctagon className="w-5 h-5" />}
+                  color="red"
+                />
+              </div>
+
+              {periodStats.length === 0 ? (
+                <div className="py-12 text-center text-slate-400">
+                  <Calendar className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                  <p>当前时间范围内暂无统计数据</p>
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>班级</th>
+                        <th className="text-center">借用次数</th>
+                        <th className="text-center">借用器材总数</th>
+                        <th className="text-center">逾期次数</th>
+                        <th className="text-center">损坏次数</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {periodStats.map((stats) => (
+                        <tr key={stats.className}>
+                          <td className="font-medium">{stats.className}</td>
+                          <td className="text-center">
+                            <span className="inline-flex items-center justify-center min-w-[32px] px-2 py-1 bg-primary-50 text-primary-700 rounded-full text-sm font-semibold">
+                              {stats.borrowCount}
+                            </span>
+                          </td>
+                          <td className="text-center">{stats.totalQuantity} 件</td>
+                          <td className="text-center">
+                            {stats.overdueCount > 0 ? (
+                              <span className="inline-flex items-center justify-center min-w-[32px] px-2 py-1 bg-orange-50 text-orange-700 rounded-full text-sm font-semibold">
+                                {stats.overdueCount}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">0</span>
+                            )}
+                          </td>
+                          <td className="text-center">
+                            {stats.damageCount > 0 ? (
+                              <span className="inline-flex items-center justify-center min-w-[32px] px-2 py-1 bg-red-50 text-red-700 rounded-full text-sm font-semibold">
+                                {stats.damageCount}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">0</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           )}
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import type { BorrowRecord, BorrowStatus } from '../types';
+import type { BorrowRecord, BorrowStatus, ReturnDiffDetail } from '../types';
 import { mockBorrowRecords } from '../data/mockData';
 import { generateId } from '../utils/idGenerator';
 import { isOverdue, getToday } from '../utils/dateUtils';
@@ -8,7 +8,13 @@ import { isOverdue, getToday } from '../utils/dateUtils';
 interface BorrowState {
   records: BorrowRecord[];
   addRecord: (record: Omit<BorrowRecord, 'id' | 'status' | 'returnedQuantity' | 'quantityDiff'>) => void;
-  returnEquipment: (recordId: string, returnedQuantity: number, quantityDiff: number, remark?: string) => void;
+  returnEquipment: (
+    recordId: string,
+    returnedQuantity: number,
+    quantityDiff: number,
+    remark?: string,
+    diffDetails?: ReturnDiffDetail[]
+  ) => void;
   updateRecordStatus: (id: string, status: BorrowStatus) => void;
   getActiveRecords: () => BorrowRecord[];
   getOverdueRecords: () => BorrowRecord[];
@@ -17,6 +23,8 @@ interface BorrowState {
   getRecordsByBorrower: (borrowerName: string) => BorrowRecord[];
   getAllRecords: () => BorrowRecord[];
   refreshOverdueStatus: () => void;
+  getLastBorrowByClass: (className: string) => { equipmentId: string; equipmentName: string; quantity: number }[];
+  replaceAll: (records: BorrowRecord[]) => void;
 }
 
 export const useBorrowStore = create<BorrowState>()(
@@ -36,13 +44,14 @@ export const useBorrowStore = create<BorrowState>()(
         set({ records: [newRecord, ...records] });
       },
 
-      returnEquipment: (recordId, returnedQuantity, quantityDiff, remark) => {
+      returnEquipment: (recordId, returnedQuantity, quantityDiff, remark, diffDetails) => {
         const { records } = get();
         set({
           records: records.map((r) => {
             if (r.id !== recordId) return r;
             const totalReturned = r.returnedQuantity + returnedQuantity;
             const allReturned = totalReturned >= r.quantity;
+            const existingDiffs = r.diffDetails || [];
             return {
               ...r,
               returnedQuantity: totalReturned,
@@ -50,6 +59,7 @@ export const useBorrowStore = create<BorrowState>()(
               returnDate: getToday(),
               status: allReturned ? 'returned' : 'partial',
               remark: remark || r.remark,
+              diffDetails: diffDetails ? [...existingDiffs, ...diffDetails] : existingDiffs,
             };
           }),
         });
@@ -107,6 +117,28 @@ export const useBorrowStore = create<BorrowState>()(
             return r;
           }),
         });
+      },
+
+      getLastBorrowByClass: (className) => {
+        const { records } = get();
+        const classRecords = records
+          .filter((r) => r.borrowerType === 'class' && r.className === className)
+          .sort((a, b) => new Date(b.borrowDate).getTime() - new Date(a.borrowDate).getTime());
+
+        if (classRecords.length === 0) return [];
+
+        const lastDate = classRecords[0].borrowDate;
+        return classRecords
+          .filter((r) => r.borrowDate === lastDate)
+          .map((r) => ({
+            equipmentId: r.equipmentId,
+            equipmentName: r.equipmentName,
+            quantity: r.quantity,
+          }));
+      },
+
+      replaceAll: (records) => {
+        set({ records });
       },
     }),
     {

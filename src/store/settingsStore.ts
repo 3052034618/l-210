@@ -5,6 +5,7 @@ import { mockSettings } from '../data/mockData';
 
 interface SettingsState extends AppSettings {
   updateSettings: (updates: Partial<AppSettings>) => void;
+  replaceAll: (settings: AppSettings) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -14,6 +15,10 @@ export const useSettingsStore = create<SettingsState>()(
 
       updateSettings: (updates) => {
         set((state) => ({ ...state, ...updates }));
+      },
+
+      replaceAll: (settings) => {
+        set(settings);
       },
     }),
     {
