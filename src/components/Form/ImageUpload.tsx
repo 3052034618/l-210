@@ -7,23 +7,38 @@ interface ImageUploadProps {
   maxImages?: number;
 }
 
+const readFileAsDataURL = (file: File): Promise<string> => {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result as string);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+};
+
 export const ImageUpload = ({ images, onChange, maxImages = 5 }: ImageUploadProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = e.target.files;
-    if (!files) return;
+    if (!files || files.length === 0) return;
 
-    Array.from(files).forEach((file) => {
-      if (images.length >= maxImages) return;
+    const remainingSlots = maxImages - images.length;
+    if (remainingSlots <= 0) {
+      if (fileInputRef.current) {
+        fileInputRef.current.value = '';
+      }
+      return;
+    }
 
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const result = event.target?.result as string;
-        onChange([...images, result]);
-      };
-      reader.readAsDataURL(file);
-    });
+    const filesToRead = Array.from(files).slice(0, remainingSlots);
+
+    try {
+      const newImages = await Promise.all(filesToRead.map(file => readFileAsDataURL(file)));
+      onChange([...images, ...newImages]);
+    } catch (err) {
+      console.error('图片读取失败：', err);
+    }
 
     if (fileInputRef.current) {
       fileInputRef.current.value = '';

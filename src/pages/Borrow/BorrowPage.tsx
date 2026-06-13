@@ -116,8 +116,19 @@ export const BorrowPage = () => {
       return;
     }
 
+    if (borrowDays > maxBorrowDays) {
+      showError(`借用天数不能超过最长借用天数（${maxBorrowDays}天）`);
+      return;
+    }
+
+    if (borrowDays < 1) {
+      showError('借用天数至少为1天');
+      return;
+    }
+
+    const actualBorrowDays = Math.min(borrowDays, maxBorrowDays);
     const borrowDate = getToday();
-    const dueDate = addDays(borrowDate, borrowDays);
+    const dueDate = addDays(borrowDate, actualBorrowDays);
     const className = borrowerType === 'class' ? selectedClass : '';
     const borrower = borrowerType === 'class' ? borrowerName || '体育老师' : borrowerName;
 
@@ -348,6 +359,9 @@ export const BorrowPage = () => {
               <label className="label flex items-center gap-2">
                 <Calendar className="w-4 h-4" />
                 借用天数
+                <span className="text-xs text-slate-400 font-normal">
+                  （最长 {maxBorrowDays} 天）
+                </span>
               </label>
               <div className="flex items-center gap-2">
                 <button
@@ -358,20 +372,40 @@ export const BorrowPage = () => {
                 </button>
                 <input
                   type="number"
-                  className="input flex-1 text-center"
+                  className={`input flex-1 text-center ${
+                    borrowDays > maxBorrowDays ? 'border-red-400 focus:ring-red-300' : ''
+                  }`}
                   value={borrowDays}
-                  onChange={(e) => setBorrowDays(parseInt(e.target.value) || 1)}
+                  onChange={(e) => {
+                    const val = parseInt(e.target.value) || 1;
+                    setBorrowDays(val);
+                  }}
+                  onBlur={() => {
+                    if (borrowDays > maxBorrowDays) {
+                      setBorrowDays(maxBorrowDays);
+                    }
+                    if (borrowDays < 1) {
+                      setBorrowDays(1);
+                    }
+                  }}
                   min="1"
+                  max={maxBorrowDays}
                 />
                 <button
                   className="w-9 h-9 rounded-lg bg-slate-100 text-slate-600 hover:bg-slate-200 flex items-center justify-center"
-                  onClick={() => setBorrowDays(borrowDays + 1)}
+                  onClick={() => setBorrowDays(Math.min(maxBorrowDays, borrowDays + 1))}
                 >
                   <Plus className="w-4 h-4" />
                 </button>
               </div>
+              {borrowDays > maxBorrowDays && (
+                <p className="text-xs text-red-500 mt-1 flex items-center gap-1">
+                  <AlertTriangle className="w-3 h-3" />
+                  借用天数超过上限（{maxBorrowDays}天），请调整
+                </p>
+              )}
               <p className="text-xs text-slate-400 mt-1">
-                应还日期：{formatDate(addDays(getToday(), borrowDays))}
+                应还日期：{formatDate(addDays(getToday(), Math.min(borrowDays, maxBorrowDays)))}
               </p>
             </div>
 
