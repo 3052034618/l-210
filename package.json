@@ -4,12 +4,12 @@
   "private": true,
   "description": "智慧体育器材借还管理系统",
   "author": "体育器材室",
-  "main": "electron/main.js",
+  "main": "electron/main.cjs",
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "dev:electron": "concurrently -k \"npm:dev\" \"npm:electron:wait\"",
-    "electron:wait": "wait-on http://localhost:5173 && electron .",
+    "dev:electron": "concurrently -k -n VITE,ELECTRON -c blue,green \"npm:dev\" \"npm:electron:start\"",
+    "electron:start": "wait-on tcp:5173 && electron .",
     "electron": "electron .",
     "build": "tsc -b && vite build",
     "build:electron": "npm run build && electron-builder",
@@ -35,14 +35,18 @@
           "target": "nsis",
           "arch": ["x64"]
         }
-      ]
+      ],
+      "icon": "public/icon.ico"
     },
     "nsis": {
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "智慧体育器材借还管理系统"
+      "shortcutName": "智慧体育器材借还管理系统",
+      "installerIcon": "public/icon.ico",
+      "uninstallerIcon": "public/icon.ico",
+      "installerHeaderIcon": "public/icon.ico"
     }
   },
   "dependencies": {
