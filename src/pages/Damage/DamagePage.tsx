@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../../components/Layout/PageHeader';
 import { Modal } from '../../components/Modal/Modal';
+import { ImageUpload, ImageViewer } from '../../components/Form/ImageUpload';
 import { useDamageStore } from '../../store/damageStore';
 import { useEquipmentStore } from '../../store/equipmentStore';
 import { useToast } from '../../store/toastStore';
@@ -37,6 +38,7 @@ export const DamagePage = () => {
     damageType: 'minor' as DamageType,
     description: '',
     photoUrl: '',
+    photoUrls: [] as string[],
     handler: '',
   });
 
@@ -78,6 +80,7 @@ export const DamagePage = () => {
       damageType: newDamage.damageType,
       description: newDamage.description,
       photoUrl: newDamage.photoUrl,
+      photoUrls: newDamage.photoUrls,
       handler: newDamage.handler,
       handleResult: '',
     });
@@ -89,6 +92,7 @@ export const DamagePage = () => {
       damageType: 'minor',
       description: '',
       photoUrl: '',
+      photoUrls: [],
       handler: '',
     });
   };
@@ -423,11 +427,11 @@ export const DamagePage = () => {
 
           <div>
             <label className="label">损坏照片</label>
-            <div className="border-2 border-dashed border-slate-200 rounded-xl p-8 text-center hover:border-primary-300 transition-colors cursor-pointer">
-              <Camera className="w-10 h-10 text-slate-300 mx-auto mb-2" />
-              <p className="text-sm text-slate-400">点击上传或拖拽图片到此处</p>
-              <p className="text-xs text-slate-300 mt-1">支持 JPG、PNG 格式</p>
-            </div>
+            <ImageUpload
+              images={newDamage.photoUrls}
+              onChange={(images) => setNewDamage({ ...newDamage, photoUrls: images })}
+              maxImages={5}
+            />
           </div>
         </div>
       </Modal>
@@ -505,6 +509,11 @@ export const DamagePage = () => {
                 </div>
               </div>
             )}
+
+            <div>
+              <h4 className="font-medium text-slate-700 mb-2">现场照片</h4>
+              <ImageViewer images={selectedRecord.photoUrls || []} />
+            </div>
 
             {selectedRecord.status === 'pending' && (
               <div className="flex gap-3 pt-4 border-t border-slate-100">

@@ -41,10 +41,11 @@ export const useBorrowStore = create<BorrowState>()(
         set({
           records: records.map((r) => {
             if (r.id !== recordId) return r;
-            const allReturned = returnedQuantity >= r.quantity;
+            const totalReturned = r.returnedQuantity + returnedQuantity;
+            const allReturned = totalReturned >= r.quantity;
             return {
               ...r,
-              returnedQuantity: r.returnedQuantity + returnedQuantity,
+              returnedQuantity: totalReturned,
               quantityDiff,
               returnDate: getToday(),
               status: allReturned ? 'returned' : 'partial',
@@ -65,7 +66,9 @@ export const useBorrowStore = create<BorrowState>()(
 
       getActiveRecords: () => {
         const { records } = get();
-        return records.filter((r) => r.status === 'borrowing' || r.status === 'overdue');
+        return records.filter((r) => 
+          r.status === 'borrowing' || r.status === 'overdue' || r.status === 'partial'
+        );
       },
 
       getOverdueRecords: () => {

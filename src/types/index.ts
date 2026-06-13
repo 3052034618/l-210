@@ -51,6 +51,7 @@ export interface DamageRecord {
   damageType: DamageType;
   description: string;
   photoUrl: string;
+  photoUrls: string[];
   status: DamageStatus;
   handler: string;
   handleDate?: string;

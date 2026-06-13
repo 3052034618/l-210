@@ -596,18 +596,56 @@ export const EquipmentPage = () => {
           </div>
         }
       >
-        <div className="grid grid-cols-4 gap-4">
-          {equipment.slice(0, 12).map((eq) => (
-            <div
-              key={eq.id}
-              className="border-2 border-dashed border-slate-200 rounded-lg p-3 text-center"
-            >
-              <div className="text-3xl mb-2">{eq.imageUrl}</div>
-              <p className="text-sm font-medium text-slate-800 truncate">{eq.name}</p>
-              <p className="text-xs font-mono text-primary-600 mt-1">{eq.code}</p>
-              <div className="mt-2 text-xs text-slate-400">{eq.specification}</div>
-            </div>
-          ))}
+        <style>{`
+          @media print {
+            body * {
+              visibility: hidden;
+            }
+            .print-area, .print-area * {
+              visibility: visible;
+            }
+            .print-area {
+              position: absolute;
+              left: 0;
+              top: 0;
+              width: 100%;
+            }
+            .no-print {
+              display: none !important;
+            }
+            .print-page {
+              page-break-after: always;
+            }
+            .print-page:last-child {
+              page-break-after: auto;
+            }
+          }
+        `}</style>
+        <div className="print-area">
+          {(() => {
+            const itemsPerPage = 16;
+            const pages: Equipment[][] = [];
+            for (let i = 0; i < equipment.length; i += itemsPerPage) {
+              pages.push(equipment.slice(i, i + itemsPerPage));
+            }
+            return pages.map((page, pageIndex) => (
+              <div key={pageIndex} className={`print-page ${pageIndex > 0 ? 'mt-8' : ''}`}>
+                <div className="grid grid-cols-4 gap-4">
+                  {page.map((eq) => (
+                    <div
+                      key={eq.id}
+                      className="border-2 border-dashed border-slate-200 rounded-lg p-3 text-center"
+                    >
+                      <div className="text-3xl mb-2">{eq.imageUrl}</div>
+                      <p className="text-sm font-medium text-slate-800 truncate">{eq.name}</p>
+                      <p className="text-xs font-mono text-primary-600 mt-1">{eq.code}</p>
+                      <div className="mt-2 text-xs text-slate-400">{eq.specification}</div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ));
+          })()}
         </div>
       </Modal>
 

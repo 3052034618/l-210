@@ -7,7 +7,7 @@ import { getToday } from '../utils/dateUtils';
 
 interface DamageState {
   records: DamageRecord[];
-  addRecord: (record: Omit<DamageRecord, 'id' | 'status'>) => void;
+  addRecord: (record: Omit<DamageRecord, 'id' | 'status'> & { photoUrls?: string[] }) => void;
   updateRecord: (id: string, updates: Partial<DamageRecord>) => void;
   updateStatus: (id: string, status: DamageStatus, handler?: string, handleResult?: string) => void;
   getRecordsByEquipment: (equipmentId: string) => DamageRecord[];
@@ -24,6 +24,7 @@ export const useDamageStore = create<DamageState>()(
         const { records } = get();
         const newRecord: DamageRecord = {
           ...record,
+          photoUrls: record.photoUrls || [],
           id: generateId(),
           status: 'pending',
         };

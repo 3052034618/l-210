@@ -11,9 +11,10 @@ import {
 } from 'lucide-react';
 import { PageHeader } from '../../components/Layout/PageHeader';
 import { Modal } from '../../components/Modal/Modal';
+import { ImageUpload } from '../../components/Form/ImageUpload';
 import { useBorrowStore } from '../../store/borrowStore';
 import { useEquipmentStore } from '../../store/equipmentStore';
-  import { useDamageStore } from '../../store/damageStore';
+import { useDamageStore } from '../../store/damageStore';
 import { useToast } from '../../store/toastStore';
 import type { BorrowRecord } from '../../types';
 import { BORROW_STATUS_LABELS } from '../../types';
@@ -33,6 +34,7 @@ export const ReturnPage = () => {
   const [hasDamage, setHasDamage] = useState(false);
   const [damageDescription, setDamageDescription] = useState('');
   const [damageType, setDamageType] = useState<'minor' | 'serious' | 'scrapped'>('minor');
+  const [damagePhotos, setDamagePhotos] = useState<string[]>([]);
   const [isReturnModalOpen, setIsReturnModalOpen] = useState(false);
   const [recentReturns, setRecentReturns] = useState<BorrowRecord[]>([]);
 
@@ -63,6 +65,7 @@ export const ReturnPage = () => {
       setQuantityDiff(0);
       setHasDamage(false);
       setDamageDescription('');
+      setDamagePhotos([]);
       setIsReturnModalOpen(true);
     } else {
       showError('未找到该器材的借出记录');
@@ -76,6 +79,7 @@ export const ReturnPage = () => {
     setQuantityDiff(0);
     setHasDamage(false);
     setDamageDescription('');
+    setDamagePhotos([]);
     setIsReturnModalOpen(true);
   };
 
@@ -116,6 +120,7 @@ export const ReturnPage = () => {
         damageType,
         description: damageDescription,
         photoUrl: '',
+        photoUrls: damagePhotos,
         handler: '',
         handleResult: '',
       });
@@ -514,6 +519,14 @@ export const ReturnPage = () => {
                       value={damageDescription}
                       onChange={(e) => setDamageDescription(e.target.value)}
                       placeholder="请描述损坏情况..."
+                    />
+                  </div>
+                  <div>
+                    <label className="label">损坏照片</label>
+                    <ImageUpload
+                      images={damagePhotos}
+                      onChange={setDamagePhotos}
+                      maxImages={5}
                     />
                   </div>
                 </div>
